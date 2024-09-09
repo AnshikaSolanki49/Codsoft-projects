@@ -1,0 +1,94 @@
+pip install tensorflow keras numpy matplotlib pillow nltk opencv-python
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.applications.vgg16 import preprocess_input
+from PIL import Image
+import numpy as np
+
+def preprocess_image(image_path):
+    img = Image.open(image_path).resize((224, 224))
+    img = np.array(img)
+    img = np.expand_dims(img, axis=0)
+    img = preprocess_input(img)
+    return img
+
+def preprocess_caption(caption, tokenizer, max_length):
+    seq = tokenizer.texts_to_sequences([caption])[0]
+    seq = pad_sequences([seq], maxlen=max_length, padding='post')
+    return seq
+from tensorflow.keras.applications import VGG16
+from tensorflow.keras.models import Model
+
+# Load pre-trained VGG16 model + higher level layers
+base_model = VGG16(weights="imagenet")
+cnn_model = Model(inputs=base_model.input, outputs=base_model.layers[-2].output)  # Remove last classification layer
+cnn_model.trainable = False  # Freeze the model
+
+def extract_image_features(image):
+    return cnn_model.predict(image)
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Embedding, Dense, Input, Add
+
+# LSTM-based caption generator
+def create_model(vocab_size, max_length):
+    image_input = Input(shape=(4096,))
+    image_features = Dense(256, activation='relu')(image_input)
+
+    text_input = Input(shape=(max_length,))
+    text_features = Embedding(vocab_size, 256)(text_input)
+    text_features = LSTM(256)(text_features)
+
+    decoder = Add()([image_features, text_features])
+    output = Dense(vocab_size, activation='softmax')(decoder)
+
+    model = Model(inputs=[image_input, text_input], outputs=output)
+    return model
+from tensorflow.keras.optimizers import Adam
+
+model = create_model(vocab_size=len(tokenizer.word_index) + 1, max_length=max_caption_length)
+model.compile(loss='categorical_crossentropy', optimizer=Adam())
+
+model.fit([image_features, captions], next_words, epochs=10, verbose=2)
+from tensorflow.keras.optimizers import Adam
+
+model = create_model(vocab_size=len(tokenizer.word_index) + 1, max_length=max_caption_length)
+model.compile(loss='categorical_crossentropy', optimizer=Adam())
+
+model.fit([image_features, captions], next_words, epochs=10, verbose=2)
+def generate_caption(model, image, tokenizer, max_length):
+    caption = "<start>"
+    for _ in range(max_length):
+        seq = tokenizer.texts_to_sequences([caption])[0]
+        seq = pad_sequences([seq], maxlen=max_length, padding='post')
+
+        # Predict the next word
+        y_pred = model.predict([image, seq], verbose=0)
+        y_pred = np.argmax(y_pred)
+
+        # Map the integer back to the word
+        word = tokenizer.index_word.get(y_pred, None)
+        if word is None or word == '<end>':
+            break
+
+        # Add the word to the caption
+        caption += ' ' + word
+
+    return caption
+from nltk.translate.bleu_score import sentence_bleu
+
+def evaluate_caption(caption, ground_truth):
+    reference = [ground_truth.split()]
+    candidate = caption.split()
+    score = sentence_bleu(reference, candidate)
+    return score
+- dataset/
+    - images/
+    - captions.txt
+- model/
+    - vgg16_model.h5
+    - caption_generator.h5
+- src/
+    - preprocess.py
+    - train.py
+    - generate_caption.py
+- app.py

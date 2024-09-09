@@ -1,0 +1,104 @@
+pip install numpy pandas scikit-learn surprise
+import pandas as pd
+
+# Load datasets
+movies = pd.read_csv('movies.csv')
+ratings = pd.read_csv('ratings.csv')
+
+# Check the structure of the data
+print(movies.head())
+print(ratings.head())
+# Keep necessary columns
+ratings = ratings[['userId', 'movieId', 'rating']]
+from surprise import Dataset, Reader
+from surprise import SVD
+from surprise.model_selection import cross_validate, train_test_split
+from surprise import accuracy
+
+# Load the ratings dataset using Surprise library's format
+reader = Reader(rating_scale=(0.5, 5.0))
+data = Dataset.load_from_df(ratings[['userId', 'movieId', 'rating']], reader)
+
+# Split the dataset into train and test sets
+trainset, testset = train_test_split(data, test_size=0.25)
+
+# Use Singular Value Decomposition (SVD) algorithm
+algo = SVD()
+
+# Train the model on the trainset
+algo.fit(trainset)
+
+# Make predictions on the testset
+predictions = algo.test(testset)
+
+# Evaluate the performance
+accuracy.rmse(predictions)
+def get_movie_recommendations(user_id, algo, movies, ratings, num_recommendations=5):
+    # Get the list of movie IDs the user has already rated
+    rated_movie_ids = ratings[ratings['userId'] == user_id]['movieId'].tolist()
+
+    # Get all movie IDs
+    all_movie_ids = movies['movieId'].tolist()
+
+    # Recommend movies that the user hasn't rated yet
+    unrated_movie_ids = [movie_id for movie_id in all_movie_ids if movie_id not in rated_movie_ids]
+
+    # Predict ratings for the unrated movies
+    predictions = [algo.predict(user_id, movie_id) for movie_id in unrated_movie_ids]
+
+    # Sort predictions by the estimated rating
+    recommendations = sorted(predictions, key=lambda x: x.est, reverse=True)
+
+    # Get the top movie recommendations
+    top_recommendations = recommendations[:num_recommendations]
+
+    # Map the movie IDs back to titles
+    recommended_movies = []
+    for rec in top_recommendations:
+        movie_id = rec.iid
+        movie_title = movies[movies['movieId'] == movie_id]['title'].values[0]
+        recommended_movies.append((movie_title, rec.est))
+
+    return recommended_movies
+
+# Example: Get movie recommendations for user 1
+user_id = 1
+recommendations = get_movie_recommendations(user_id, algo, movies, ratings)
+print("Top movie recommendations for user {}: ".format(user_id))
+for movie, rating in recommendations:
+    print(f"{movie}: {rating:.2f}")
+# Evaluate the performance of the model
+accuracy.rmse(predictions)
+accuracy.mae(predictions)
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Create TF-IDF matrix for movie genres
+tfidf = TfidfVectorizer(stop_words='english')
+tfidf_matrix = tfidf.fit_transform(movies['genres'])
+
+# Compute cosine similarity between all movies based on genres
+cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
+
+# Get movie recommendations based on content (genres)
+def content_based_recommendations(movie_title, cosine_sim, movies, num_recommendations=5):
+    idx = movies[movies['title'] == movie_title].index[0]
+    sim_scores = list(enumerate(cosine_sim[idx]))
+    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+    sim_scores = sim_scores[1:num_recommendations + 1]
+
+    movie_indices = [i[0] for i in sim_scores]
+    return movies['title'].iloc[movie_indices]
+
+# Example: Get movie recommendations based on a specific movie
+movie_title = 'Toy Story (1995)'
+recommended_movies = content_based_recommendations(movie_title, cosine_sim, movies)
+print(f"Movies similar to {movie_title}:")
+print(recommended_movies)
+- data/
+    - movies.csv
+    - ratings.csv
+- src/
+    - collaborative_filtering.py
+    - content_based.py
+- app.py
